@@ -1,0 +1,3 @@
+[submodule "conf/example-catalog"]
+	path = conf/example-catalog
+	url = https://github.com/wot-oss/example-catalog.git

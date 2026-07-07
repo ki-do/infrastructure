@@ -11,6 +11,7 @@ services:
       - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.watch"
+      - "--providers.docker.network=${TRAEFIK_DOCKER_NETWORK}"
       - "--providers.file.filename=/etc/traefik/dynamic/tls.yml"
       - "--providers.file.watch=true"
       - "--metrics.prometheus=true"
@@ -22,7 +23,7 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--certificatesresolvers.letsencrypt.acme.email=dev@plugfest.thingweb.io"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/traefik/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
       - "--entrypoints.modbus-elevator.address=:${MODBUS_ELEVATOR_PORT_IN}"
@@ -164,6 +165,16 @@ services:
       - "8084:16686"
       - "8085:14268"
       - "5689:5689/udp"
+    networks:
+      - things_network
+  tmc:
+    image: ghcr.io/wot-oss/tmc:v0.1.4
+    command: ["serve", "--port", "8082"]
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./conf/example-catalog:/catalog/tmc
+      - ./conf/tmc-config:/root/.tm-catalog
     networks:
       - things_network
 volumes:

@@ -13,6 +13,11 @@ Portainer is used to manage running Docker containers.
 
 [docker-compose-services.yml](./docker-compose-services.yml) contains the configuration for the deployment of the infrastructural services.
 
+for local deployment use:
+```bash
+docker compose -f docker-compose-services.local.yml --env-file .env.local up
+```
+
 Set the environment variable `CONFIG_FILEPATH` to the location of the `conf` folder on your computer. This folder is found in the root of this repository.
 
 To be able to access the services, the user must login through GitHub. For GitHub authentication to work, environment variables `OAUTH_SECRET` (can be any string) and, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` must be set with the configuration of GitHub OAuth application. Only whitelisted emails can access some of the services. Whitelisted emails can be set using the environment variable `WHITELISTED_EMAILS`. These services are accessible at:

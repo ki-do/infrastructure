@@ -1,0 +1,223 @@
+services:
+  reverse-proxy:
+    image: traefik:v3.0
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mydashboard.rule=Host(`traefik.localhost`)
+      - traefik.http.routers.mydashboard.service=api@internal
+      - traefik.http.routers.mydashboard.middlewares=test-things-auth
+      - traefik.http.middlewares.cors-headers.headers.accesscontrolallowmethods=GET,POST,PUT,DELETE,OPTIONS,PATCH
+      - traefik.http.middlewares.cors-headers.headers.accesscontrolalloworiginlist=*
+      - traefik.http.middlewares.cors-headers.headers.accesscontrolallowheaders=*
+      - traefik.http.middlewares.cors-headers.headers.accesscontrolmaxage=100
+      - traefik.http.middlewares.cors-headers.headers.addvaryheader=true
+    command:
+      - "--log.level=DEBUG"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.watch"
+      - "--providers.docker.network=things_network_local"
+      - "--providers.file.filename=/etc/traefik/dynamic/tls.yml"
+      - "--providers.file.watch=true"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      - "--entrypoints.modbus-elevator.address=:5020"
+      - "--entrypoints.coap-calculator-simple.address=:5683/udp"
+      - "--entrypoints.coap-calculator-content-negotiation.address=:5684/udp"
+      - "--entrypoints.smart-home-smart-clock.address=:5685/udp"
+      - "--entrypoints.web.http.middlewares=cors-headers@docker"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+      - "5020:5020"  # Modbus
+      - "5683:5683/udp"  # CoAP simple
+      - "5684:5684/udp"  # CoAP negotiation
+      - "5685:5685/udp"  # Smart home clock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik/config:/etc/traefik/dynamic:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
+      - ./traefik/letsencrypt:/letsencrypt
+    networks:
+      - things_network_local
+
+  test-things-auth:
+    image: thomseddon/traefik-forward-auth:2
+    environment:
+      - DEFAULT_PROVIDER=generic-oauth
+      - SECRET=local-dev-secret-change-me
+      - PROVIDERS_GENERIC_OAUTH_AUTH_URL=https://github.com/login/oauth/authorize
+      - PROVIDERS_GENERIC_OAUTH_TOKEN_URL=https://github.com/login/oauth/access_token
+      - PROVIDERS_GENERIC_OAUTH_USER_URL=https://api.github.com/user
+      - PROVIDERS_GENERIC_OAUTH_CLIENT_ID=your-github-client-id
+      - PROVIDERS_GENERIC_OAUTH_CLIENT_SECRET=your-github-client-secret
+      - PROVIDERS_GENERIC_OAUTH_SCOPE=user,repo
+      - INSECURE_COOKIE=true  # For local development only
+      - LOG_LEVEL=debug
+      - WHITELIST=your-email@example.com
+    labels:
+      - "traefik.http.middlewares.test-things-auth.forwardauth.address=http://test-things-auth:4181"
+      - "traefik.http.middlewares.test-things-auth.forwardauth.authResponseHeaders=X-Forwarded-User"
+      - "traefik.http.services.test-things-auth.loadbalancer.server.port=4181"
+    networks:
+      - things_network_local
+
+  whoami:
+    image: traefik/whoami
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`localhost`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+      - "traefik.http.services.whoami.loadbalancer.server.port=80"
+    networks:
+      - things_network_local
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - "prometheus_data_local:/prometheus"
+      - "./conf/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)"
+      - "traefik.http.routers.prometheus.service=prometheus"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - cadvisor
+    networks:
+      - things_network_local
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      - PROMETHEUS_PORT=9090
+      - GF_SERVER_DOMAIN=grafana.localhost
+      - GF_SERVER_ROOT_URL=http://grafana.localhost
+      - LOKI_PORT=3100
+      - GF_AUTH_ANONYMOUS_ENABLED=true  # For local development
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin  # For local development
+    volumes:
+      - ./conf/grafana/provisioning:/etc/grafana/provisioning
+      - ./conf/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data_local:/var/lib/grafana
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.routers.grafana.service=grafana"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - things_network_local
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor_local
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cadvisor.rule=Host(`cadvisor.localhost`)"
+      - "traefik.http.routers.cadvisor.service=cadvisor"
+      - "traefik.http.routers.cadvisor.entrypoints=web"
+      - "traefik.http.services.cadvisor.loadbalancer.server.port=8080"
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - things_network_local
+
+  loki:
+    image: grafana/loki:2.9.2
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.loki.rule=Host(`loki.localhost`)"
+      - "traefik.http.routers.loki.service=loki"
+      - "traefik.http.routers.loki.entrypoints=web"
+      - "traefik.http.services.loki.loadbalancer.server.port=3100"
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./conf/loki/loki-config.yaml:/etc/loki/local-config.yaml
+      - loki_data_local:/loki
+    networks:
+      - things_network_local
+
+  promtail:
+    image: grafana/promtail:2.9.2
+    volumes:
+      - /var/log:/var/log
+      - ./conf/promtail/promtail-config.yaml:/etc/promtail/config.yaml
+    depends_on:
+      - loki
+    networks:
+      - things_network_local
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./conf/mosquitto:/mosquitto/config
+      - mosquitto_data_local:/mosquitto/data
+      - mosquitto_logs_local:/mosquitto/log
+    networks:
+      - things_network_local
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jaeger.rule=Host(`jaeger.localhost`)"
+      - "traefik.http.routers.jaeger.service=jaeger"
+      - "traefik.http.routers.jaeger.entrypoints=web"
+      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+      - "9411:9411"    # Zipkin collector
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+      - "5689:5689/udp"
+    networks:
+      - things_network_local
+
+  tmc:
+    image: ghcr.io/wot-oss/tmc:v0.1.4
+    command: ["serve", "--port", "8082"]
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./conf/example-catalog:/catalog/tmc
+      - ./conf/tmc-config:/root/.tm-catalog
+    networks:
+      - things_network_local
+
+volumes:
+  prometheus_data_local:
+  grafana_data_local:
+  loki_data_local:
+  mosquitto_data_local:
+  mosquitto_logs_local:
+
+networks:
+  things_network_local:
+    name: things_network_local
+    driver: 'bridge'

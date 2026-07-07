@@ -1,0 +1,9 @@
+{
+  "repos": {
+    "example-catalog": {
+      "description": "",
+      "loc": "/catalog/tmc",
+      "type": "file"
+    }
+  }
+}
