@@ -194,6 +194,16 @@ services:
   tmc-release:
     image: ghcr.io/wot-oss/tmc:v0.1.5
     command: ["serve", "--port", "8082"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tmc-release.rule=Host(`${STACK_HOSTNAME}`) && PathPrefix(`/tmc-release`)"
+      - "traefik.http.routers.tmc-release.entrypoints=websecure"
+      - "traefik.http.routers.tmc-release.tls=true"
+      - "traefik.http.routers.tmc-release.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tmc-release.service=tmc-release"
+      - "traefik.http.middlewares.tmc-release-strip.stripprefix.prefixes=/tmc-release"
+      - "traefik.http.routers.tmc-release.middlewares=tmc-release-strip"
+      - "traefik.http.services.tmc-release.loadbalancer.server.port=8082"
     ports:
       - "8082:8082"
     volumes:
@@ -205,6 +215,16 @@ services:
   tmc-latest:
     image: ghcr.io/wot-oss/tmc:latest
     command: ["serve", "--port", "8083"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tmc-latest.rule=Host(`${STACK_HOSTNAME}`) && PathPrefix(`/tmc-latest`)"
+      - "traefik.http.routers.tmc-latest.entrypoints=websecure"
+      - "traefik.http.routers.tmc-latest.tls=true"
+      - "traefik.http.routers.tmc-latest.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tmc-latest.service=tmc-latest"
+      - "traefik.http.middlewares.tmc-latest-strip.stripprefix.prefixes=/tmc-latest"
+      - "traefik.http.routers.tmc-latest.middlewares=tmc-latest-strip"
+      - "traefik.http.services.tmc-latest.loadbalancer.server.port=8083"
     ports:
       - "8083:8083"
     volumes:
